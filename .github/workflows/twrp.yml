@@ -19,6 +19,8 @@ on:
           - 3.5.0_twrp-9.0
           - 3.4.0_twrp-9.0
           - 3.3.1_twrp-9.0
+          - 3.3.1_twrp-8.1
+          - 3.3.1_twrp-7.1
       DEVICE_TREE:
         description: 'Device Tree URL'
         required: true
@@ -87,19 +89,25 @@ jobs:
         TWRP_VERSION="${{ github.event.inputs.TWRP_VERSION }}"
         IFS='_' read -r TWRP_VER USER_BRANCH <<< "$TWRP_VERSION"
         
-        # Map user-friendly branch names to actual manifest branch names
+        # Map user-friendly branch names to the manifest repo and branch.
+        # twrp-9.0 and older (and twrp-10) only exist in the "omni" manifest; twrp-11 and newer use the "aosp" one.
+        AOSP_MANIFEST="https://github.com/minimal-manifest-twrp/platform_manifest_twrp_aosp.git"
+        OMNI_MANIFEST="https://github.com/minimal-manifest-twrp/platform_manifest_twrp_omni.git"
         case "$USER_BRANCH" in
-          "twrp-12.1") MANIFEST_BRANCH="twrp-12.1" && JAVA_VERSION="11" ;;
-          "twrp-11.0") MANIFEST_BRANCH="twrp-11" && JAVA_VERSION="11" ;;
-          "twrp-10.0") MANIFEST_BRANCH="twrp-10" && JAVA_VERSION="8" ;;
-          "twrp-9.0") MANIFEST_BRANCH="twrp-9" && JAVA_VERSION="8" ;;
-          *) MANIFEST_BRANCH="$USER_BRANCH" && JAVA_VERSION="8" ;;
+          "twrp-12.1") MANIFEST_URL="$AOSP_MANIFEST" && MANIFEST_BRANCH="twrp-12.1" && JAVA_VERSION="11" ;;
+          "twrp-11.0") MANIFEST_URL="$AOSP_MANIFEST" && MANIFEST_BRANCH="twrp-11" && JAVA_VERSION="11" ;;
+          "twrp-10.0") MANIFEST_URL="$OMNI_MANIFEST" && MANIFEST_BRANCH="twrp-10.0-deprecated" && JAVA_VERSION="8" ;;
+          "twrp-9.0")  MANIFEST_URL="$OMNI_MANIFEST" && MANIFEST_BRANCH="twrp-9.0" && JAVA_VERSION="8" ;;
+          "twrp-8.1")  MANIFEST_URL="$OMNI_MANIFEST" && MANIFEST_BRANCH="twrp-8.1" && JAVA_VERSION="8" ;;
+          "twrp-7.1")  MANIFEST_URL="$OMNI_MANIFEST" && MANIFEST_BRANCH="twrp-7.1" && JAVA_VERSION="8" ;;
+          *) MANIFEST_URL="$AOSP_MANIFEST" && MANIFEST_BRANCH="$USER_BRANCH" && JAVA_VERSION="11" ;;
         esac
-        
+
         echo "✅ TWRP Version: $TWRP_VER"
-        echo "✅ Using Manifest Branch: $MANIFEST_BRANCH"
+        echo "✅ Using Manifest: $MANIFEST_URL ($MANIFEST_BRANCH)"
         echo "TWRP_VER=$TWRP_VER" >> $GITHUB_ENV
         echo "MANIFEST_BRANCH=$MANIFEST_BRANCH" >> $GITHUB_ENV
+        echo "MANIFEST_URL=$MANIFEST_URL" >> $GITHUB_ENV
         echo "JAVA_VERSION=$JAVA_VERSION" >> $GITHUB_ENV
 
     - name: Cleanup Workspace
@@ -137,7 +145,7 @@ jobs:
         cd workspace
         git config --global user.name "${{ env.USER_NAME }}"
         git config --global user.email "${{ env.USER_EMAIL }}"
-        repo init --depth=1 -u https://github.com/minimal-manifest-twrp/platform_manifest_twrp_aosp.git -b ${{ env.MANIFEST_BRANCH }}
+        repo init --depth=1 -u ${{ env.MANIFEST_URL }} -b ${{ env.MANIFEST_BRANCH }}
 
     - name: Sync Repository
       run: |
@@ -165,8 +173,8 @@ jobs:
             exit 1
         fi
 
-    - name: Install Python 2 (for twrp-9 and twrp-10)
-      if: contains(env.MANIFEST_BRANCH, 'twrp-9') || contains(env.MANIFEST_BRANCH, 'twrp-10')
+    - name: Install Python 2 (for twrp-10 and older, omni manifest)
+      if: contains(env.MANIFEST_URL, 'twrp_omni')
       run: |
         sudo apt -y install python2
         sudo ln -sf /usr/bin/python2 /usr/bin/python
@@ -240,7 +248,7 @@ jobs:
         body: |
           ## Build Information
           - 📱 **TWRP Version:** ${{ env.TWRP_VER }}
-          - 🅰️ **Manifest Branch:** ${{ env.MANIFEST_BRANCH }}
+          - 🅰️ **Manifest:** ${{ env.MANIFEST_URL }} (`${{ env.MANIFEST_BRANCH }}`)
           - 🎯 **Target:** ${{ github.event.inputs.BUILD_TARGET}}.img
           - 🌳 **Device Tree:** [${{ github.event.inputs.DEVICE_TREE_BRANCH }}](${{ env.DEVICE_TREE_URL }}/tree/${{ github.event.inputs.DEVICE_TREE_BRANCH }})
           - 🔖 **Commit:** [Latest commit](${{ env.DEVICE_TREE_URL }}/commit/${{ env.COMMIT_ID }}) during build
